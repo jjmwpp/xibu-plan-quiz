@@ -290,8 +290,8 @@ var currentTrack=0;
 var isPlaying=false;
 
 var tracks=[
- {name:'高山流水（古筝）',url:'https://www.chinaz.com/res/audio/guqin.mp3'},
- {name:'我是奶龙',url:'https://downsc.chinaz.net/audio/beep.mp3'}
+ {name:'高山流水（古筝）',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'},
+ {name:'我是奶龙 🐉',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'}
 ];
 
 function toggleMusicMenu(){
@@ -324,7 +324,7 @@ function playTrack(idx){
   document.getElementById('musicMenu').classList.remove('show');
  }).catch(function(e){
   btn.textContent='!';
-  alert('无法播放音频，请检查网络或替换音乐文件地址');
+  alert('无法播放音频。如需添加背景音乐，请下载mp3文件放在HTML同目录下，然后修改gen.py中tracks数组的url为本地路径（如"music1.mp3"），重新生成即可');
  });
 }
 
