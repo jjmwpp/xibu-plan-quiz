@@ -181,23 +181,51 @@ def parse_tuan(text):
     return qs
 
 
-def parse_zhiyuan(text):
-    """Parse 志愿服务: (A) or (D) etc."""
+def parse_zhiyuan(text, answers=None):
+    """Parse 志愿服务 with optional answer dict from PDF red text analysis."""
     qs = []
-    for line in text.split('\n'):
-        line = line.strip()
+    lines = text.split('\n')
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
         if not line:
             continue
-        m = re.match(r'(\d+)[.、]?\s*(.*?)[（(]\s*([A-E])\s*[）)]\s*(.*)', line)
-        if not m:
-            m = re.match(r'(\d+)[.、]?\s*(.*?)[（(]\s*([A-E])\s*[）)]', line)
+        m = re.match(r'(\d+)[.、]?\s*(.*)', line)
         if not m:
             continue
-        qtext = m.group(2).strip()
-        if len(m.groups()) > 3:
-            qtext = (qtext + ' ' + m.group(4).strip()).strip()
-        qs.append({'q': qtext.rstrip('，。；'), 'ans': ord(m.group(3)) - ord('A'),
-                   'opts': ['A', 'B', 'C', 'D'], 'type': 'choice'})
+        qnum = int(m.group(1))
+        qtext = m.group(2).strip().rstrip('，。；（）')
+
+        opts = []
+        while i < len(lines):
+            l = lines[i].strip()
+            if not l:
+                i += 1; continue
+            om = re.match(r'([A-E])[、．.]\s*(.*)', l)
+            if om:
+                opt_text = om.group(2).strip()
+                sub_opts = re.split(r'(?=[A-E][、．.])', opt_text)
+                if len(sub_opts) > 1:
+                    for so in sub_opts:
+                        so_clean = re.sub(r'^[A-E][、．.]\s*', '', so).strip()
+                        if so_clean:
+                            opts.append(so_clean)
+                else:
+                    opts.append(opt_text)
+                i += 1
+                continue
+            if re.match(r'\d+[.、]', l):
+                break
+            i += 1
+
+        if not opts:
+            continue
+        if answers and qnum in answers:
+            ans_idx = answers[qnum]
+            if ans_idx >= len(opts):
+                ans_idx = len(opts) - 1
+            qs.append({'q': qtext, 'opts': opts, 'ans': ans_idx, 'type': 'choice'})
     return qs
 
 
@@ -296,8 +324,54 @@ if qs:
     print(f'共青团知识: {len(qs)} questions')
     topics.append({'name': '共青团知识', 'questions': qs})
 
-# 志愿服务
-qs = parse_zhiyuan(read('【志愿服务工作】练习题+答案.txt'))
+# 志愿服务（从PDF红色字体提取答案）
+import fitz, re
+zhiyuan_answers = {}
+try:
+    zdoc = fitz.open(os.path.join(DIR, '【志愿服务工作】练习题+答案.pdf'))
+    z_lines = []
+    for pidx in range(zdoc.page_count):
+        page = zdoc[pidx]
+        for b in page.get_text('dict')['blocks']:
+            if 'lines' not in b: continue
+            for l in b['lines']:
+                full_text = ''
+                is_red = False
+                for s in l['spans']:
+                    t = s['text']
+                    full_text += t
+                    c = s.get('color', 0)
+                    r = (c >> 16) & 0xFF
+                    if r == 255 and (c & 0xFF) < 100:
+                        is_red = True
+                full_text = full_text.strip()
+                if full_text:
+                    z_lines.append((full_text, is_red))
+    zi = 0
+    while zi < len(z_lines):
+        t, _ = z_lines[zi]
+        zm = re.match(r'^(\d+)\s*[.、]\s*', t)
+        if not zm: zi += 1; continue
+        zqnum = int(zm.group(1))
+        z_opts_found = {}
+        zj = zi + 1
+        while zj < len(z_lines) and len(z_opts_found) < 4:
+            zt, zr = z_lines[zj]
+            zom = re.match(r'^([A-E])\s*[．.、]', zt)
+            if zom:
+                zl = zom.group(1)
+                if zl not in z_opts_found:
+                    z_opts_found[zl] = zr
+            zj += 1
+        if len(z_opts_found) == 4:
+            red_ones = [l for l, r_ in z_opts_found.items() if r_]
+            if len(red_ones) == 1:
+                zhiyuan_answers[zqnum] = ord(red_ones[0]) - ord('A')
+        zi += 1
+except Exception as e:
+    print(f'志愿服务PDF解析失败: {e}')
+
+qs = parse_zhiyuan(read('【志愿服务工作】练习题+答案.txt'), zhiyuan_answers)
 if qs:
     print(f'志愿服务工作: {len(qs)} questions')
     topics.append({'name': '志愿服务工作', 'questions': qs})
