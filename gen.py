@@ -324,52 +324,17 @@ if qs:
     print(f'共青团知识: {len(qs)} questions')
     topics.append({'name': '共青团知识', 'questions': qs})
 
-# 志愿服务（从PDF红色字体提取答案）
-import fitz, re
-zhiyuan_answers = {}
-try:
-    zdoc = fitz.open(os.path.join(DIR, '【志愿服务工作】练习题+答案.pdf'))
-    z_lines = []
-    for pidx in range(zdoc.page_count):
-        page = zdoc[pidx]
-        for b in page.get_text('dict')['blocks']:
-            if 'lines' not in b: continue
-            for l in b['lines']:
-                full_text = ''
-                is_red = False
-                for s in l['spans']:
-                    t = s['text']
-                    full_text += t
-                    c = s.get('color', 0)
-                    r = (c >> 16) & 0xFF
-                    if r == 255 and (c & 0xFF) < 100:
-                        is_red = True
-                full_text = full_text.strip()
-                if full_text:
-                    z_lines.append((full_text, is_red))
-    zi = 0
-    while zi < len(z_lines):
-        t, _ = z_lines[zi]
-        zm = re.match(r'^(\d+)\s*[.、]\s*', t)
-        if not zm: zi += 1; continue
-        zqnum = int(zm.group(1))
-        z_opts_found = {}
-        zj = zi + 1
-        while zj < len(z_lines) and len(z_opts_found) < 4:
-            zt, zr = z_lines[zj]
-            zom = re.match(r'^([A-E])\s*[．.、]', zt)
-            if zom:
-                zl = zom.group(1)
-                if zl not in z_opts_found:
-                    z_opts_found[zl] = zr
-            zj += 1
-        if len(z_opts_found) == 4:
-            red_ones = [l for l, r_ in z_opts_found.items() if r_]
-            if len(red_ones) == 1:
-                zhiyuan_answers[zqnum] = ord(red_ones[0]) - ord('A')
-        zi += 1
-except Exception as e:
-    print(f'志愿服务PDF解析失败: {e}')
+# 志愿服务（使用用户提供的标准答案）
+zhiyuan_answers = {
+    1:0,2:1,3:2,4:0,5:2,6:1,7:3,8:2,9:1,10:1,
+    11:1,12:2,13:0,15:0,16:2,17:2,18:0,19:1,20:2,
+    21:0,22:3,23:2,24:1,25:3,26:2,27:0,28:0,29:3,30:2,
+    31:0,32:1,33:2,34:0,35:3,36:2,37:2,38:3,39:3,
+    40:0,41:2,42:1,43:2,44:2,45:0,46:0,47:1,
+    49:0,50:1,51:1,52:1,53:1,54:3,55:0,56:3,57:1,
+    58:3,59:3,60:2,61:2,62:3,63:3,64:3,65:1,66:3,
+    67:3,68:3,69:2,70:2,71:1,72:1,73:1,74:1,75:1,76:2,77:2
+}
 
 qs = parse_zhiyuan(read('【志愿服务工作】练习题+答案.txt'), zhiyuan_answers)
 if qs:
