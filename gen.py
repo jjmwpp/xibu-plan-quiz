@@ -615,7 +615,7 @@ function toggleMusicMenu(){
 function playTrack(idx){
  var player=document.getElementById('audioPlayer');
  var btn=document.getElementById('musicBtn');
- var tracks=document.querySelectorAll('.music-menu .track');
+ var menuItems=document.querySelectorAll('.music-menu .track');
 
  if(currentTrack===idx && isPlaying){
   player.pause();
@@ -627,18 +627,33 @@ function playTrack(idx){
  }
 
  currentTrack=idx;
+ btn.textContent='⏳';
+ btn.disabled=true;
+ for(var i=0;i<menuItems.length;i++)menuItems[i].classList.remove('active');
+
  player.src=tracks[idx].url;
- player.play().then(function(){
-  isPlaying=true;
-  btn.classList.add('playing');
-  btn.textContent='♫';
-  for(var i=0;i<tracks.length;i++)tracks[i].classList.remove('active');
-  document.querySelector('.music-menu .track[data-track="'+idx+'"]').classList.add('active');
-  document.getElementById('musicMenu').classList.remove('show');
- }).catch(function(e){
-  btn.textContent='!';
-  alert('无法播放音频。如需添加背景音乐，请下载mp3文件放在HTML同目录下，然后修改gen.py中tracks数组的url为本地路径（如\"music1.mp3\"），重新生成即可');
- });
+ player.load();
+
+ var playWhenReady=function(){
+  player.play().then(function(){
+   isPlaying=true;
+   btn.classList.add('playing');
+   btn.textContent='♫';
+   btn.disabled=false;
+   document.querySelector('.music-menu .track[data-track="'+idx+'"]').classList.add('active');
+   document.getElementById('musicMenu').classList.remove('show');
+  }).catch(function(e){
+   btn.textContent='♪';
+   btn.disabled=false;
+   alert('无法播放 '+tracks[idx].name+'。请确认mp3文件与HTML在同一目录下。错误：'+e.message);
+  });
+ };
+
+ if(player.readyState>=2){playWhenReady();}
+ else{
+  player.addEventListener('canplay',playWhenReady,{once:true});
+  setTimeout(function(){if(!isPlaying&&btn.textContent==='⏳')playWhenReady();},3000);
+ }
 }
 
 document.addEventListener('click',function(e){
