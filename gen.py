@@ -157,6 +157,8 @@ def parse_zhiyuan(text, answers=None):
                     if opt_text and opt_text not in seen_opts:
                         opts.append(opt_text)
                         seen_opts.add(opt_text)
+            elif re.match(r'^[A-E]\s*$', l):
+                continue
             elif re.match(r'^[A-E](?:\s|$)', l):
                 opt_text = re.sub(r'^[A-E]\s*', '', l).strip()
                 if opt_text and opt_text not in seen_opts:
@@ -166,13 +168,26 @@ def parse_zhiyuan(text, answers=None):
                 last_opt = opts[-1] + ' ' + l
                 opts[-1] = last_opt.strip()
 
-        if not opts:
+        if not opts or len(qtext) < 2:
+            continue
+        # Deduplicate and limit to 4 options
+        unique_opts = []
+        seen = set()
+        for o in opts:
+            key = o.strip().lower()
+            if key and key not in seen:
+                unique_opts.append(o)
+                seen.add(key)
+        opts = unique_opts[:4]
+        if len(opts) < 2 or len(qtext) < 2:
             continue
         if answers and qnum in answers:
             ans_idx = answers[qnum]
             if ans_idx >= len(opts):
                 ans_idx = len(opts) - 1
             qs.append({'q': qtext, 'opts': opts, 'ans': ans_idx, 'type': 'choice'})
+        if qnum >= 39:
+            break
 
     return qs
 
