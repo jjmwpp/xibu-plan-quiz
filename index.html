@@ -60,6 +60,11 @@ h1{text-align:center;font-size:24px;margin-bottom:4px;color:#1a73e8}
 .header-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .save-toast{position:fixed;top:20px;right:20px;background:#34a853;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
 .save-toast.show{opacity:1}
+.bottom-nav{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding:16px 0;border-top:1px solid #e0e0e0;gap:12px}
+.bottom-nav button{padding:10px 24px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s;background:#1a73e8;color:#fff;white-space:nowrap}
+.bottom-nav button:hover{background:#1557b0}
+.bottom-nav button:disabled{background:#ccc;cursor:not-allowed}
+.bottom-nav .nav-label{font-size:13px;color:#888;text-align:center;flex:1}
 </style>
 </head>
 <body>
@@ -77,6 +82,11 @@ h1{text-align:center;font-size:24px;margin-bottom:4px;color:#1a73e8}
 </div>
 <div id="stats" class="stats"></div>
 <div id="tabContent"></div>
+<div class="bottom-nav">
+<button id="prevBtn" onclick="prevTab()">上一页</button>
+<span class="nav-label" id="navLabel">1 / 9</span>
+<button id="nextBtn" onclick="nextTab()">下一页</button>
+</div>
 <div id="saveToast" class="save-toast">进度已保存</div>
 <button class="back-to-top" id="backToTop" onclick="scrollToTop()">↑</button>
 <script>
@@ -215,12 +225,22 @@ function selectJudge(t,q,val){
  updateQuestionUI(t,q);
 }
 
+var currentTab=0;
+
 function switchTab(t){
+ currentTab=t;
  var tabs=document.querySelectorAll('.tab-content'),btns=document.querySelectorAll('.tab-btn');
  for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');
  for(var i=0;i<btns.length;i++)btns[i].classList.remove('active');
  document.getElementById('tab-'+t).classList.add('active');btns[t].classList.add('active');
+ var total=allTopics.length;
+ document.getElementById('navLabel').textContent=(t+1)+' / '+total;
+ document.getElementById('prevBtn').disabled=(t===0);
+ document.getElementById('nextBtn').disabled=(t===total-1);
 }
+
+function prevTab(){if(currentTab>0)switchTab(currentTab-1);}
+function nextTab(){if(currentTab<allTopics.length-1)switchTab(currentTab+1);}
 
 function resetAll(){
  if(!confirm('确定要重置所有答案吗？'))return;
