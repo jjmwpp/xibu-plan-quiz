@@ -10,7 +10,6 @@ def read(fname):
         return f.read()
 
 def parse_std(text):
-    """Parse format: numbered questions with options and 答案：X"""
     questions = []
     lines = text.split('\n')
     in_ref = False
@@ -18,206 +17,154 @@ def parse_std(text):
     while i < len(lines):
         line = lines[i].strip()
         i += 1
-        if not line:
-            continue
-        if '参考答案' in line:
-            in_ref = True
-            continue
-        if in_ref:
-            continue
-        if '张远山' in line or '说明' in line or line.startswith('一、') or line.startswith('二、'):
-            continue
-        if line.startswith('（') and '）' in line[:15]:
-            continue
-
-        # Question with number
+        if not line: continue
+        if '参考答案' in line: in_ref = True; continue
+        if in_ref: continue
+        if '张远山' in line or '说明' in line or line.startswith('一、') or line.startswith('二、'): continue
+        if line.startswith('（') and '）' in line[:15]: continue
         m = re.match(r'(\d+)\.\s*(.*)', line)
-        if not m:
-            continue
-
+        if not m: continue
         qtext = m.group(2).strip()
         ans = None
         opts = []
-
-        # Look for inline answer
         am = re.search(r'答案[：:]([A-Z]+)', qtext)
         if am:
             ans = am.group(1)
             qtext = re.sub(r'答案[：:][A-Z]+', '', qtext).strip()
-
-        # Collect options
         while i < len(lines):
             l = lines[i].strip()
-            if not l:
-                i += 1
-                continue
+            if not l: i += 1; continue
             om = re.match(r'([A-E])[、．.]\s*(.*)', l)
             if om:
                 opts.append(om.group(2).strip())
-                i += 1
-                continue
+                i += 1; continue
             if '答案' in l:
                 am2 = re.search(r'答案[：:]([A-Z\d]+)', l)
-                if am2 and not ans:
-                    ans = am2.group(1)
-                i += 1
-                break
-            if re.match(r'\d+\.', l) or '解析' in l:
-                break
+                if am2 and not ans: ans = am2.group(1)
+                i += 1; break
+            if re.match(r'\d+\.', l) or '解析' in l: break
             i += 1
-
         if qtext and ans:
             ai = ord(ans[0]) - ord('A') if ans[0].isalpha() else 0
-            if opts and ai >= len(opts):
-                ai = len(opts) - 1
+            if opts and ai >= len(opts): ai = len(opts) - 1
             questions.append({'q': qtext, 'opts': opts, 'ans': ai, 'type': 'choice'})
     return questions
 
-
-def parse_20da(text):
-    """Parse 20大报告 fill-in: number + text + 答案：xxx"""
+def parse_fill_20da(text):
     qs = []
     for line in text.split('\n'):
         line = line.strip()
-        if not line:
-            continue
+        if not line: continue
         m = re.match(r'(\d+)\s+(.*?)(?:答案[：:])(.*)', line)
         if m:
             qs.append({'q': m.group(2).strip(), 'ans': m.group(3).strip(), 'type': 'fill'})
     return qs
 
-
-def parse_sanzhong(text):
-    """Parse 三中全会: mixed types in one file"""
-    qs = []
-    for line in text.split('\n'):
-        line = line.strip()
-        if not line or '张远山' in line:
-            continue
-        m = re.match(r'(\d+)\.\s*(.*?)(?:答案[：:]?\s*)([A-Z\d对错]+)', line)
-        if not m:
-            continue
-        qtext = m.group(2).strip()
-        ans_text = m.group(3).strip()
-
-        # Check for judge
-        if ans_text in ['对', '错', '√', '×']:
-            qs.append({'q': qtext, 'ans': 0 if ans_text in ['对', '√'] else 1, 'opts': ['正确', '错误'], 'type': 'choice'})
-            continue
-
-        # Check for inline options
-        opt_matches = list(re.finditer(r'([A-E])[.．、]\s*([^A-E]+?)(?=[A-E][.．、]|$)', qtext))
-        if opt_matches:
-            ctext = qtext[:opt_matches[0].start()].strip()
-            copts = [m.group(2).strip().rstrip('，。；') for m in opt_matches]
-            ai = ord(ans_text[0]) - ord('A') if ans_text[0].isalpha() else 0
-            if ai >= len(copts):
-                ai = len(copts) - 1
-            qs.append({'q': ctext, 'opts': copts, 'ans': ai, 'type': 'choice'})
-        elif len(ans_text) > 2:
-            qs.append({'q': qtext, 'ans': ans_text, 'type': 'fill'})
-        else:
-            qs.append({'q': qtext, 'ans': 0, 'opts': ['A', 'B', 'C', 'D'], 'type': 'choice'})
-    return qs
-
-
 def parse_tuan(text):
-    """Parse 共青团: (√) (×) or (A) (B) etc. Multi-line options."""
     qs = []
     lines = text.split('\n')
     i = 0
     while i < len(lines):
         line = lines[i].strip()
         i += 1
-        if not line or '专业知识' in line or '专业知识' in line:
-            continue
-
-        # True/false: (√) or (×)
+        if not line or '专业知识' in line: continue
         m = re.match(r'(\d+)[.、]\s*(.*?)\(\s*([√×])\s*\)', line)
         if m:
             qs.append({'q': m.group(2).strip().rstrip('，。；'), 'ans': 0 if m.group(3) == '√' else 1,
                        'opts': ['正确', '错误'], 'type': 'choice'})
             continue
-
-        # Choice: (A) (B) etc - check for number at start
         m2 = re.match(r'(\d+)[.、]\s*(.*?)\(\s*([A-E])\s*\)', line)
-        if not m2:
-            continue
-
+        if not m2: continue
         qtext = m2.group(2).strip()
         ans_letter = m2.group(3)
-
-        # Collect options from following lines
         opts = []
         while i < len(lines):
             l = lines[i].strip()
-            if not l:
-                i += 1; continue
+            if not l: i += 1; continue
             om = re.match(r'([A-E])[、．.]\s*(.*)', l)
             if om:
                 opt_text = om.group(2).strip()
-                # Check if this line has multiple inline options (A、textB、textC、textD、text)
                 sub_opts = re.split(r'(?=[A-E][、．.])', opt_text)
                 if len(sub_opts) > 1:
                     for so in sub_opts:
                         so_clean = re.sub(r'^[A-E][、．.]\s*', '', so).strip()
-                        if so_clean:
-                            opts.append(so_clean)
+                        if so_clean: opts.append(so_clean)
                 else:
                     opts.append(opt_text)
-                i += 1
-                continue
-            if re.match(r'\d+[.、]', l):
-                break
+                i += 1; continue
+            if re.match(r'\d+[.、]', l): break
             i += 1
-
-        if not opts:
-            opts = ['A', 'B', 'C', 'D']
-
+        if not opts: opts = ['A', 'B', 'C', 'D']
         ans_idx = ord(ans_letter) - ord('A')
-        if ans_idx >= len(opts):
-            ans_idx = 0
+        if ans_idx >= len(opts): ans_idx = 0
         qs.append({'q': qtext, 'ans': ans_idx, 'opts': opts, 'type': 'choice'})
     return qs
 
-
 def parse_zhiyuan(text, answers=None):
-    """Parse 志愿服务 with optional answer dict from PDF red text analysis."""
-    qs = []
+    """Parse 志愿服务 - uses TWO-PASS approach to avoid sequential issues."""
+    QT_PAT = re.compile(r'(\d+)\s*[.、\uff0e]\s*(.*)')
+    QT_PAT2 = re.compile(r'(\d+)\s+(.+)')
+    OPT_PAT = re.compile(r'[A-E]\s*[.、\uff0e]')
+    PAGE_PAT = re.compile(r'^\d{1,2}$')
+
+    # Pass 1: Find all question-option boundaries
     lines = text.split('\n')
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        i += 1
-        if not line:
+    question_starts = {}  # line_idx -> qnum
+    for idx, raw in enumerate(lines):
+        line = raw.strip()
+        if not line or PAGE_PAT.match(line):
             continue
-        m = re.match(r'(\d+)[.、]?\s*(.*)', line)
+        m = QT_PAT.match(line)
         if not m:
-            continue
-        qnum = int(m.group(1))
-        qtext = m.group(2).strip().rstrip('，。；（）')
+            m = QT_PAT2.match(line)
+        if m:
+            question_starts[idx] = int(m.group(1))
+
+    if not question_starts:
+        return []
+
+    # Pass 2: Process each question with its option block
+    qs = []
+    sorted_idxs = sorted(question_starts.keys())
+
+    for qi in range(len(sorted_idxs)):
+        start_idx = sorted_idxs[qi]
+        end_idx = sorted_idxs[qi + 1] if qi + 1 < len(sorted_idxs) else len(lines)
+
+        qnum = question_starts[start_idx]
+        qtext = QT_PAT.match(lines[start_idx].strip())
+        if not qtext:
+            qtext = QT_PAT2.match(lines[start_idx].strip())
+        qtext = qtext.group(2).strip().rstrip('，。；（）')
 
         opts = []
-        while i < len(lines):
-            l = lines[i].strip()
-            if not l:
-                i += 1; continue
-            om = re.match(r'([A-E])[、．.]\s*(.*)', l)
-            if om:
-                opt_text = om.group(2).strip()
-                sub_opts = re.split(r'(?=[A-E][、．.])', opt_text)
-                if len(sub_opts) > 1:
-                    for so in sub_opts:
-                        so_clean = re.sub(r'^[A-E][、．.]\s*', '', so).strip()
-                        if so_clean:
-                            opts.append(so_clean)
-                else:
-                    opts.append(opt_text)
-                i += 1
+        seen_opts = set()
+        for j in range(start_idx + 1, end_idx):
+            l = lines[j].strip()
+            if not l or PAGE_PAT.match(l):
                 continue
-            if re.match(r'\d+[.、]', l):
-                break
-            i += 1
+            if OPT_PAT.match(l):
+                opt_text = re.sub(r'^[A-E]\s*[.、\uff0e]\s*', '', l).strip()
+                # Try splitting inline options
+                parts = re.split(r'(?=[A-E]\s*[.、\uff0e])', opt_text)
+                if len(parts) > 1:
+                    for part in parts:
+                        cleaned = re.sub(r'^[A-E]\s*[.、\uff0e]\s*', '', part).strip()
+                        if cleaned and cleaned not in seen_opts:
+                            opts.append(cleaned)
+                            seen_opts.add(cleaned)
+                else:
+                    if opt_text and opt_text not in seen_opts:
+                        opts.append(opt_text)
+                        seen_opts.add(opt_text)
+            elif re.match(r'^[A-E](?:\s|$)', l):
+                opt_text = re.sub(r'^[A-E]\s*', '', l).strip()
+                if opt_text and opt_text not in seen_opts:
+                    opts.append(opt_text)
+                    seen_opts.add(opt_text)
+            elif opts:
+                last_opt = opts[-1] + ' ' + l
+                opts[-1] = last_opt.strip()
 
         if not opts:
             continue
@@ -226,31 +173,49 @@ def parse_zhiyuan(text, answers=None):
             if ans_idx >= len(opts):
                 ans_idx = len(opts) - 1
             qs.append({'q': qtext, 'opts': opts, 'ans': ans_idx, 'type': 'choice'})
+
+    return qs
+
+
+def parse_sanzhong(text):
+    qs = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line or '张远山' in line: continue
+        m = re.match(r'(\d+)\.\s*(.*?)(?:答案[：:]?\s*)([A-Z\d对错]+)', line)
+        if not m: continue
+        qtext = m.group(2).strip()
+        ans_text = m.group(3).strip()
+        if ans_text in ['对', '错', '√', '×']:
+            qs.append({'q': qtext, 'ans': 0 if ans_text in ['对', '√'] else 1, 'opts': ['正确', '错误'], 'type': 'choice'})
+            continue
+        opt_matches = list(re.finditer(r'([A-E])[.．、]\s*([^A-E]+?)(?=[A-E][.．、]|$)', qtext))
+        if opt_matches:
+            ctext = qtext[:opt_matches[0].start()].strip()
+            copts = [m.group(2).strip().rstrip('，。；') for m in opt_matches]
+            ai = ord(ans_text[0]) - ord('A') if ans_text[0].isalpha() else 0
+            if ai >= len(copts): ai = len(copts) - 1
+            qs.append({'q': ctext, 'opts': copts, 'ans': ai, 'type': 'choice'})
+        elif len(ans_text) > 2:
+            qs.append({'q': qtext, 'ans': ans_text, 'type': 'fill'})
+        else:
+            qs.append({'q': qtext, 'ans': 0, 'opts': ['A', 'B', 'C', 'D'], 'type': 'choice'})
     return qs
 
 
 def parse_dangshi(text):
-    """Parse 党史国情: answer key at bottom like '1.【答案】D'"""
-    # Extract answer key
     answers = {}
     for line in text.split('\n'):
         m = re.match(r'(\d+)\.\s*【答案】(\w+)', line)
         if m:
             answers[int(m.group(1))] = m.group(2)
-
     qs = []
     lines = text.split('\n')
-    cur_q = ''
-    cur_opts = []
-    cur_num = 0
-
+    cur_q, cur_opts, cur_num = '', [], 0
     for line in lines:
         line = line.strip()
-        if not line or '专项练习' in line or '单项选择题' in line:
-            continue
-        if line.startswith('二、') or line.startswith('三、'):
-            break
-
+        if not line or '专项练习' in line or '单项选择题' in line: continue
+        if line.startswith('二、') or line.startswith('三、'): break
         m = re.match(r'(\d+)\.\s*(.*)', line)
         if m:
             if cur_num and cur_q and cur_opts:
@@ -258,29 +223,21 @@ def parse_dangshi(text):
                 ai = ord(ans_text[0]) - ord('A') if ans_text[0].isalpha() else 0
                 if ai >= len(cur_opts): ai = len(cur_opts) - 1
                 qs.append({'q': cur_q, 'opts': list(cur_opts), 'ans': ai, 'type': 'choice'})
-            cur_num = int(m.group(1))
-            cur_q = m.group(2).strip()
-            cur_opts = []
+            cur_num = int(m.group(1)); cur_q = m.group(2).strip(); cur_opts = []
             continue
-
         om = re.match(r'([A-E])[.．、]\s*(.*)', line)
-        if om:
-            cur_opts.append(om.group(2).strip())
-
-    # Last question
+        if om: cur_opts.append(om.group(2).strip())
     if cur_num and cur_q and cur_opts:
         ans_text = answers.get(cur_num, 'A')
         ai = ord(ans_text[0]) - ord('A') if ans_text[0].isalpha() else 0
         if ai >= len(cur_opts): ai = len(cur_opts) - 1
         qs.append({'q': cur_q, 'opts': cur_opts, 'ans': ai, 'type': 'choice'})
-
     return qs
 
 
 # ===== BUILD ALL TOPICS =====
 topics = []
 
-# Standard format files
 for fname, tname in [
     ('【2025中央经济工作会议】测试题+答案.txt', '2025中央经济工作会议'),
     ('【2026中央一号文件】测试题+答案.txt', '2026中央一号文件'),
@@ -291,26 +248,20 @@ for fname, tname in [
     if qs:
         print(f'{tname}: {len(qs)} questions')
         topics.append({'name': tname, 'questions': qs})
-    else:
-        print(f'{tname}: EMPTY!')
 
-# 20大报告
-qs = parse_20da(read('【20大报告】练习题100题+答案.txt'))
+qs = parse_fill_20da(read('【20大报告】练习题100题+答案.txt'))
 if qs:
     print(f'20大报告: {len(qs)} questions')
     topics.append({'name': '20大报告', 'questions': qs})
 
-# 三中全会
 qs = parse_sanzhong(read('【二十届三中全会】测试题50题.txt'))
 if qs:
     print(f'二十届三中全会: {len(qs)} questions')
     topics.append({'name': '二十届三中全会', 'questions': qs})
 
-# 党史国情
 qs = parse_dangshi(read('【党史国情】练习题+答案.txt'))
 if qs:
     print(f'党史国情: {len(qs)} questions')
-    # Split if too large
     if len(qs) > 90:
         mid = len(qs) // 2
         topics.append({'name': '党史国情(上)', 'questions': qs[:mid]})
@@ -318,13 +269,12 @@ if qs:
     else:
         topics.append({'name': '党史国情', 'questions': qs})
 
-# 共青团
 qs = parse_tuan(read('【共青团知识】练习题+答案.txt'))
 if qs:
     print(f'共青团知识: {len(qs)} questions')
     topics.append({'name': '共青团知识', 'questions': qs})
 
-# 志愿服务（使用用户提供的标准答案）
+# 志愿服务 - 使用用户提供的标准答案
 zhiyuan_answers = {
     1:0,2:1,3:2,4:0,5:2,6:1,7:3,8:2,9:1,10:1,
     11:1,12:2,13:0,15:0,16:2,17:2,18:0,19:1,20:2,
@@ -347,9 +297,6 @@ print(f'\nTotal: {len(topics)} topics, {total_qs} questions')
 
 topics_json = json.dumps(topics, ensure_ascii=False)
 
-# Read template
-template_path = os.path.join(os.path.dirname(__file__), '..', 'python期末复习', 'python_quiz.html')
-# Use embedded template instead
 HTML = '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -454,14 +401,8 @@ h1{text-align:center;font-size:24px;margin-bottom:4px;color:#1a73e8}
 <button class="back-to-top" id="backToTop" onclick="scrollToTop()">↑</button>
 <button class="music-btn" id="musicBtn" onclick="toggleMusicMenu()">♪</button>
 <div class="music-menu" id="musicMenu">
-<div class="track" data-track="0" onclick="playTrack(0)">
- <span class="indicator"></span>
- <span>高山流水（古筝）</span>
-</div>
-<div class="track" data-track="1" onclick="playTrack(1)">
- <span class="indicator"></span>
- <span>我是奶龙 🐉</span>
-</div>
+<div class="track" data-track="0" onclick="playTrack(0)"><span class="indicator"></span><span>高山流水（古筝）</span></div>
+<div class="track" data-track="1" onclick="playTrack(1)"><span class="indicator"></span><span>我是奶龙 🐉</span></div>
 </div>
 <audio id="audioPlayer" loop></audio>
 <script>
@@ -509,8 +450,6 @@ function updateQuestionUI(t, q){
  var sel=qst.sel, val=qst.val;
  var card=document.getElementById('card-'+t+'-'+q);
  if(!card) return;
-
- // Update choice options
  if(qd.type==='choice'&&qd.opts&&qd.opts.length>0){
   var opts=card.querySelectorAll('.option');
   for(var oi=0;oi<opts.length;oi++){
@@ -523,8 +462,6 @@ function updateQuestionUI(t, q){
    opts[oi].className=cls;
   }
  }
-
- // Update fill input
  if(qd.type==='fill'){
   var inp=card.querySelector('.fill-input');
   if(inp){
@@ -533,8 +470,6 @@ function updateQuestionUI(t, q){
    inp.className=ic;
   }
  }
-
- // Update feedback
  var fb=card.querySelector('.feedback');
  if(fb){
   var showFb=(sel!==undefined||showAll)&&(qd.type!=='fill'||(val!==undefined&&val.trim()!==''));
@@ -543,22 +478,14 @@ function updateQuestionUI(t, q){
   else{isCorrect=sel!==undefined&&sel===qd.ans;}
   if(showAll&&sel===undefined&&qd.type!=='fill'){isCorrect=true;showFb=true;}
   if(showAll&&qd.type==='fill'&&(val===undefined||val.trim()==='')){showFb=false;}
-
   if(showFb){
    fb.className='feedback show '+(isCorrect?'correct-fb':'wrong-fb');
    var ansSpan=fb.querySelector('.ans');
-   if(qd.type==='fill'){
-    ansSpan.textContent='正确答案：'+qd.ans;
-   }else if(qd.opts&&qd.opts.length>0){
-    ansSpan.textContent='正确答案：'+letters[qd.ans]+'. '+qd.opts[qd.ans];
-   }else{
-    ansSpan.textContent='正确答案：'+(qd.ans?'正确':'错误');
-   }
-  }else{
-   fb.className='feedback';
-  }
+   if(qd.type==='fill'){ansSpan.textContent='正确答案：'+qd.ans;}
+   else if(qd.opts&&qd.opts.length>0){ansSpan.textContent='正确答案：'+letters[qd.ans]+'. '+qd.opts[qd.ans];}
+   else{ansSpan.textContent='正确答案：'+(qd.ans?'正确':'错误');}
+  }else{fb.className='feedback';}
  }
-
  updateStats();
 }
 
@@ -567,148 +494,38 @@ function updateStats(){
  for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++){
   var qd=allTopics[t].questions[q],qst=state[t][q]||{},sel=qst.sel,val=qst.val;
   total++;
-  if(qd.type==='fill'){
-   if(val===undefined||val.trim()==='')unans++;
-   else if(val.trim()===qd.ans.trim())correct++;
-   else wrong++;
-  }else{
-   if(sel===undefined)unans++;
-   else if(sel===qd.ans)correct++;
-   else wrong++;
-  }
+  if(qd.type==='fill'){if(val===undefined||val.trim()==='')unans++;else if(val.trim()===qd.ans.trim())correct++;else wrong++;}
+  else{if(sel===undefined)unans++;else if(sel===qd.ans)correct++;else wrong++;}
  }
  var pct=total>0?((correct/total)*100).toFixed(1):0;
  document.getElementById('stats').innerHTML='<div class="stat-item">总题数：<span>'+total+'</span></div><div class="stat-item">正确：<span style="color:#2e7d32">'+correct+'</span></div><div class="stat-item">错误：<span style="color:#c62828">'+wrong+'</span></div><div class="stat-item">未答：<span style="color:#888">'+unans+'</span></div><div class="stat-item">正确率：<span>'+pct+'%</span></div>';
 }
 
-function selectChoice(t,q,oi){
- if(!state[t][q])state[t][q]={};
- state[t][q].sel=oi;
- updateQuestionUI(t,q);
-}
-
-function checkFill(t,q,val){
- if(!state[t][q])state[t][q]={};
- state[t][q].val=val;
- // Only re-render the specific question, not full page
- updateQuestionUI(t,q);
-}
-
-function selectJudge(t,q,val){
- if(!state[t][q])state[t][q]={};
- state[t][q].sel=val;
- updateQuestionUI(t,q);
-}
+function selectChoice(t,q,oi){if(!state[t][q])state[t][q]={};state[t][q].sel=oi;updateQuestionUI(t,q);}
+function checkFill(t,q,val){if(!state[t][q])state[t][q]={};state[t][q].val=val;updateQuestionUI(t,q);}
+function selectJudge(t,q,val){if(!state[t][q])state[t][q]={};state[t][q].sel=val;updateQuestionUI(t,q);}
 
 var currentTab=0;
-
 function switchTab(t){
  currentTab=t;
  var tabs=document.querySelectorAll('.tab-content'),btns=document.querySelectorAll('.tab-btn');
  for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');
  for(var i=0;i<btns.length;i++)btns[i].classList.remove('active');
  document.getElementById('tab-'+t).classList.add('active');btns[t].classList.add('active');
- var total=allTopics.length;
- document.getElementById('navLabel').textContent=(t+1)+' / '+total;
+ document.getElementById('navLabel').textContent=(t+1)+' / '+allTopics.length;
  document.getElementById('prevBtn').disabled=(t===0);
- document.getElementById('nextBtn').disabled=(t===total-1);
+ document.getElementById('nextBtn').disabled=(t===allTopics.length-1);
 }
-
 function prevTab(){if(currentTab>0)switchTab(currentTab-1);}
 function nextTab(){if(currentTab<allTopics.length-1)switchTab(currentTab+1);}
 
-function resetAll(){
- if(!confirm('确定要重置所有答案吗？'))return;
- initState();
- showAll=false;
- // Rebuild HTML to reset all UI
- buildAllHTML();
- updateStats();
-}
+function resetAll(){if(!confirm('确定要重置所有答案吗？'))return;initState();showAll=false;buildAllHTML();updateStats();}
+function showAllAnswers(){showAll=true;for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);}
+function hideAllAnswers(){showAll=false;for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);}
 
-function showAllAnswers(){
- showAll=true;
- // Update all question cards
- for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);
-}
-
-function hideAllAnswers(){
- showAll=false;
- for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);
-}
-
-// Music player
-var currentTrack=0;
-var isPlaying=false;
-
-var tracks=[
- {name:'高山流水（古筝）',url:'guzheng.mp3'},
- {name:'我是奶龙 🐉',url:'nailong.mp3'}
-];
-
-function toggleMusicMenu(){
- var menu=document.getElementById('musicMenu');
- menu.classList.toggle('show');
-}
-
-function playTrack(idx){
- var player=document.getElementById('audioPlayer');
- var btn=document.getElementById('musicBtn');
- var menuItems=document.querySelectorAll('.music-menu .track');
-
- if(currentTrack===idx && isPlaying){
-  player.pause();
-  isPlaying=false;
-  btn.classList.remove('playing');
-  btn.textContent='♪';
-  document.getElementById('musicMenu').classList.remove('show');
-  return;
- }
-
- currentTrack=idx;
- btn.textContent='⏳';
- btn.disabled=true;
- for(var i=0;i<menuItems.length;i++)menuItems[i].classList.remove('active');
-
- player.src=tracks[idx].url;
- player.load();
-
- var playWhenReady=function(){
-  player.play().then(function(){
-   isPlaying=true;
-   btn.classList.add('playing');
-   btn.textContent='♫';
-   btn.disabled=false;
-   document.querySelector('.music-menu .track[data-track="'+idx+'"]').classList.add('active');
-   document.getElementById('musicMenu').classList.remove('show');
-  }).catch(function(e){
-   btn.textContent='♪';
-   btn.disabled=false;
-   alert('无法播放 '+tracks[idx].name+'。请确认mp3文件与HTML在同一目录下。错误：'+e.message);
-  });
- };
-
- if(player.readyState>=2){playWhenReady();}
- else{
-  player.addEventListener('canplay',playWhenReady,{once:true});
-  setTimeout(function(){if(!isPlaying&&btn.textContent==='⏳')playWhenReady();},3000);
- }
-}
-
-document.addEventListener('click',function(e){
- if(!e.target.closest('.music-btn') && !e.target.closest('.music-menu')){
-  document.getElementById('musicMenu').classList.remove('show');
- }
-});
-
-// Scroll to top button
-window.addEventListener('scroll',function(){
- var btn=document.getElementById('backToTop');
- if(btn)btn.style.display=(window.scrollY>300)?'block':'none';
-});
+window.addEventListener('scroll',function(){var btn=document.getElementById('backToTop');if(btn)btn.style.display=(window.scrollY>300)?'block':'none';});
 function scrollToTop(){window.scrollTo({top:0,behavior:'smooth'});}
 
-// Save progress to localStorage
 function saveProgress(){
  try{
   var saveData={};
@@ -729,7 +546,6 @@ function saveProgress(){
  }catch(e){alert('保存失败：'+e.message);}
 }
 
-// Load progress from localStorage
 function loadProgress(){
  try{
   var saved=localStorage.getItem('xibu_quiz_progress');
@@ -743,8 +559,49 @@ function loadProgress(){
     if(saveData[t][q].val!==undefined)state[t][q].val=saveData[t][q].val;
    }
   }
- }catch(e){/* ignore */ }
+ }catch(e){/* ignore */}
 }
+
+var tracks=[
+ {name:'高山流水（古筝）',url:'guzheng.mp3'},
+ {name:'我是奶龙 🐉',url:'nailong.mp3'}
+];
+var currentTrack=0,isPlaying=false;
+
+function toggleMusicMenu(){document.getElementById('musicMenu').classList.toggle('show');}
+
+function playTrack(idx){
+ var player=document.getElementById('audioPlayer');
+ var btn=document.getElementById('musicBtn');
+ var menuItems=document.querySelectorAll('.music-menu .track');
+ if(currentTrack===idx && isPlaying){
+  player.pause();isPlaying=false;
+  btn.classList.remove('playing');btn.textContent='♪';
+  document.getElementById('musicMenu').classList.remove('show');return;
+ }
+ currentTrack=idx;btn.textContent='⏳';btn.disabled=true;
+ for(var i=0;i<menuItems.length;i++)menuItems[i].classList.remove('active');
+ player.src=tracks[idx].url;player.load();
+ var playWhenReady=function(){
+  player.play().then(function(){
+   isPlaying=true;btn.classList.add('playing');btn.textContent='♫';btn.disabled=false;
+   document.querySelector('.music-menu .track[data-track="'+idx+'"]').classList.add('active');
+   document.getElementById('musicMenu').classList.remove('show');
+  }).catch(function(e){
+   btn.textContent='♪';btn.disabled=false;
+   alert('无法播放 '+tracks[idx].name+'。请确认mp3文件与HTML在同一目录下。错误：'+e.message);
+  });
+ };
+ if(player.readyState>=2){playWhenReady();}
+ else{
+  player.addEventListener('canplay',playWhenReady,{once:true});
+  setTimeout(function(){if(!isPlaying&&btn.textContent==='⏳')playWhenReady();},3000);
+ }
+}
+
+document.addEventListener('click',function(e){
+ if(!e.target.closest('.music-btn')&&!e.target.closest('.music-menu'))document.getElementById('musicMenu').classList.remove('show');
+});
 
 initState();
 loadProgress();
