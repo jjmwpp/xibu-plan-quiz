@@ -75,48 +75,28 @@ var showAll = false;
 
 function initState(){state={};for(var t=0;t<allTopics.length;t++){state[t]={};for(var q=0;q<allTopics[t].questions.length;q++)state[t][q]={}}}
 
-function render(){
- var sp=window.scrollY||document.documentElement.scrollTop;
+function buildAllHTML(){
  var th='',tc='';
  for(var t=0;t<allTopics.length;t++){
   var tp=allTopics[t],a=t===0?' active':'';
   th+='<button class="tab-btn'+a+'" onclick="switchTab('+t+')">'+tp.name+'<br><small>('+tp.questions.length+'题)</small></button>';
   tc+='<div class="tab-content'+a+'" id="tab-'+t+'">';
   for(var q=0;q<tp.questions.length;q++){
-   var qd=tp.questions[q],qst=state[t][q]||{},sel=qst.sel,val=qst.val;
-   tc+='<div class="question-card"><div class="q-header"><span class="q-number">'+(q+1)+'</span>'+qd.q+'</div>';
+   var qd=tp.questions[q];
+   tc+='<div class="question-card" id="card-'+t+'-'+q+'"><div class="q-header"><span class="q-number">'+(q+1)+'</span>'+qd.q+'</div>';
    if(qd.type==='choice'&&qd.opts&&qd.opts.length>0){
     tc+='<div class="options">';
     for(var oi=0;oi<qd.opts.length;oi++){
-     var cls='option';
-     if(sel!==undefined||showAll){
-      if(oi===qd.ans)cls+=' correct';
-      if(sel===oi&&oi!==qd.ans)cls+=' wrong';
-      if(sel===oi)cls+=' selected';
-     }
-     tc+='<div class="'+cls+'" onclick="selectChoice('+t+','+q+','+oi+')"><span class="option-letter">'+letters[oi]+'</span><span>'+qd.opts[oi]+'</span></div>';
+     tc+='<div class="option" onclick="selectChoice('+t+','+q+','+oi+')" data-idx="'+oi+'"><span class="option-letter">'+letters[oi]+'</span><span>'+qd.opts[oi]+'</span></div>';
     }
     tc+='</div>';
-    var fb='',sf=false;
-    if(sel!==undefined){fb=(sel===qd.ans)?'correct-fb':'wrong-fb';sf=true;}
-    else if(showAll){fb='correct-fb';sf=true;}
-    tc+='<div class="feedback '+fb+(sf?' show':'')+'"><div><span class="ans">正确答案：'+letters[qd.ans]+'. '+qd.opts[qd.ans]+'</span></div></div>';
+    tc+='<div class="feedback" data-qid="'+t+'-'+q+'"><div><span class="ans"></span></div></div>';
    }else if(qd.type==='fill'){
-    var ic='fill-input';
-    if(val!==undefined&&val.trim()!=='')ic+=(val.trim()===qd.ans.trim())?' correct':' wrong';
-    tc+='<input class="'+ic+'" type="text" placeholder="请输入答案..." value="'+(val!==undefined?val:'')+'" oninput="checkFill('+t+','+q+',this.value)">';
-    var fb='',sf=false;
-    if(val!==undefined&&val.trim()!==''){fb=(val.trim()===qd.ans.trim())?'correct-fb':'wrong-fb';sf=true;}
-    else if(showAll){fb='correct-fb';sf=true;}
-    tc+='<div class="feedback '+fb+(sf?' show':'')+'"><div><span class="ans">正确答案：'+qd.ans+'</span></div></div>';
+    tc+='<input class="fill-input" type="text" placeholder="请输入答案..." oninput="checkFill('+t+','+q+',this.value)" data-qid="'+t+'-'+q+'">';
+    tc+='<div class="feedback" data-qid="'+t+'-'+q+'"><div><span class="ans"></span></div></div>';
    }else{
-    var tCls='tf-btn'+(sel===true?' selected-true':'')+(showAll&&sel===undefined&&qd.ans===true?' selected-true':''),
-        fCls='tf-btn'+(sel===false?' selected-false':'')+(showAll&&sel===undefined&&qd.ans===false?' selected-false':'');
-    tc+='<div class="tf-group"><div class="'+tCls+'" onclick="selectJudge('+t+','+q+',true)">正确</div><div class="'+fCls+'" onclick="selectJudge('+t+','+q+',false)">错误</div></div>';
-    var fb='',sf=false;
-    if(sel!==undefined){fb=(sel===qd.ans)?'correct-fb':'wrong-fb';sf=true;}
-    else if(showAll){fb='correct-fb';sf=true;}
-    tc+='<div class="feedback '+fb+(sf?' show':'')+'"><div><span class="ans">正确答案：'+(qd.ans?'正确':'错误')+'</span></div></div>';
+    tc+='<div class="tf-group"><div class="tf-btn" onclick="selectJudge('+t+','+q+',true)">正确</div><div class="tf-btn" onclick="selectJudge('+t+','+q+',false)">错误</div></div>';
+    tc+='<div class="feedback" data-qid="'+t+'-'+q+'"><div><span class="ans"></span></div></div>';
    }
    tc+='</div>';
   }
@@ -124,24 +104,103 @@ function render(){
  }
  document.getElementById('tabHeaders').innerHTML=th;
  document.getElementById('tabContent').innerHTML=tc;
- requestAnimationFrame(function(){window.scrollTo(0,sp);});
- updateStats();
 }
 
-function selectChoice(t,q,oi){if(!state[t][q])state[t][q]={};state[t][q].sel=oi;render();}
-function checkFill(t,q,val){if(!state[t][q])state[t][q]={};state[t][q].val=val;render();}
-function selectJudge(t,q,val){if(!state[t][q])state[t][q]={};state[t][q].sel=val;render();}
+function updateQuestionUI(t, q){
+ var qd=allTopics[t].questions[q];
+ var qst=state[t][q]||{};
+ var sel=qst.sel, val=qst.val;
+ var card=document.getElementById('card-'+t+'-'+q);
+ if(!card) return;
+
+ // Update choice options
+ if(qd.type==='choice'&&qd.opts&&qd.opts.length>0){
+  var opts=card.querySelectorAll('.option');
+  for(var oi=0;oi<opts.length;oi++){
+   var cls='option';
+   if(sel!==undefined||showAll){
+    if(oi===qd.ans)cls+=' correct';
+    if(sel===oi&&oi!==qd.ans)cls+=' wrong';
+    if(sel===oi)cls+=' selected';
+   }
+   opts[oi].className=cls;
+  }
+ }
+
+ // Update fill input
+ if(qd.type==='fill'){
+  var inp=card.querySelector('.fill-input');
+  if(inp){
+   var ic='fill-input';
+   if(val!==undefined&&val.trim()!=='')ic+=(val.trim()===qd.ans.trim())?' correct':' wrong';
+   inp.className=ic;
+  }
+ }
+
+ // Update feedback
+ var fb=card.querySelector('.feedback');
+ if(fb){
+  var showFb=(sel!==undefined||showAll)&&(qd.type!=='fill'||(val!==undefined&&val.trim()!==''));
+  var isCorrect=false;
+  if(qd.type==='fill'){isCorrect=val!==undefined&&val.trim()!==''&&val.trim()===qd.ans.trim();}
+  else{isCorrect=sel!==undefined&&sel===qd.ans;}
+  if(showAll&&sel===undefined&&qd.type!=='fill'){isCorrect=true;showFb=true;}
+  if(showAll&&qd.type==='fill'&&(val===undefined||val.trim()==='')){showFb=false;}
+
+  if(showFb){
+   fb.className='feedback show '+(isCorrect?'correct-fb':'wrong-fb');
+   var ansSpan=fb.querySelector('.ans');
+   if(qd.type==='fill'){
+    ansSpan.textContent='正确答案：'+qd.ans;
+   }else if(qd.opts&&qd.opts.length>0){
+    ansSpan.textContent='正确答案：'+letters[qd.ans]+'. '+qd.opts[qd.ans];
+   }else{
+    ansSpan.textContent='正确答案：'+(qd.ans?'正确':'错误');
+   }
+  }else{
+   fb.className='feedback';
+  }
+ }
+
+ updateStats();
+}
 
 function updateStats(){
  var total=0,correct=0,wrong=0,unans=0;
  for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++){
   var qd=allTopics[t].questions[q],qst=state[t][q]||{},sel=qst.sel,val=qst.val;
   total++;
-  if(qd.type==='fill'){if(val===undefined||val.trim()==='')unans++;else if(val.trim()===qd.ans.trim())correct++;else wrong++;}
-  else{if(sel===undefined)unans++;else if(sel===qd.ans)correct++;else wrong++;}
+  if(qd.type==='fill'){
+   if(val===undefined||val.trim()==='')unans++;
+   else if(val.trim()===qd.ans.trim())correct++;
+   else wrong++;
+  }else{
+   if(sel===undefined)unans++;
+   else if(sel===qd.ans)correct++;
+   else wrong++;
+  }
  }
  var pct=total>0?((correct/total)*100).toFixed(1):0;
  document.getElementById('stats').innerHTML='<div class="stat-item">总题数：<span>'+total+'</span></div><div class="stat-item">正确：<span style="color:#2e7d32">'+correct+'</span></div><div class="stat-item">错误：<span style="color:#c62828">'+wrong+'</span></div><div class="stat-item">未答：<span style="color:#888">'+unans+'</span></div><div class="stat-item">正确率：<span>'+pct+'%</span></div>';
+}
+
+function selectChoice(t,q,oi){
+ if(!state[t][q])state[t][q]={};
+ state[t][q].sel=oi;
+ updateQuestionUI(t,q);
+}
+
+function checkFill(t,q,val){
+ if(!state[t][q])state[t][q]={};
+ state[t][q].val=val;
+ // Only re-render the specific question, not full page
+ updateQuestionUI(t,q);
+}
+
+function selectJudge(t,q,val){
+ if(!state[t][q])state[t][q]={};
+ state[t][q].sel=val;
+ updateQuestionUI(t,q);
 }
 
 function switchTab(t){
@@ -151,11 +210,29 @@ function switchTab(t){
  document.getElementById('tab-'+t).classList.add('active');btns[t].classList.add('active');
 }
 
-function resetAll(){if(!confirm('确定要重置所有答案吗？'))return;initState();showAll=false;render();}
-function showAllAnswers(){showAll=true;render();}
-function hideAllAnswers(){showAll=false;render();}
+function resetAll(){
+ if(!confirm('确定要重置所有答案吗？'))return;
+ initState();
+ showAll=false;
+ // Rebuild HTML to reset all UI
+ buildAllHTML();
+ updateStats();
+}
 
-initState();render();
+function showAllAnswers(){
+ showAll=true;
+ // Update all question cards
+ for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);
+}
+
+function hideAllAnswers(){
+ showAll=false;
+ for(var t=0;t<allTopics.length;t++)for(var q=0;q<allTopics[t].questions.length;q++)updateQuestionUI(t,q);
+}
+
+initState();
+buildAllHTML();
+updateStats();
 </script>
 </div>
 </body>
